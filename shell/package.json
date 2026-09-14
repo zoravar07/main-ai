@@ -1,0 +1,26 @@
+{
+  "name": "zopro-shell",
+  "version": "0.1.0",
+  "description": "Menu bar shell for Zopro",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac --arm64"
+  },
+  "build": {
+    "appId": "com.zoravar.zopro",
+    "productName": "Zopro",
+    "files": ["main.js", "index.html", "workspace.html", "package.json"],
+    "directories": { "output": "dist-app" },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": "dir",
+      "identity": null,
+      "extendInfo": { "LSUIElement": true }
+    }
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

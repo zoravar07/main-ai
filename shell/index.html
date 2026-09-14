@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zopro</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  :root {
+    --bg: rgba(22, 25, 34, 0.92);
+    --edge: rgba(255, 255, 255, 0.09);
+    --ink: #e8e9ed;
+    --ink-dim: #8a8fa0;
+    --field: rgba(255, 255, 255, 0.05);
+
+    --internship: #6fb3c9;
+    --zmoney: #c98f6f;
+    --hungryvar: #8fbf7a;
+    --direct: #8a8fa0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font: 400 14px/1.6 -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--edge);
+    border-radius: 12px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-user-select: none;
+  }
+
+  header { padding: 14px 16px 12px; -webkit-app-region: drag; }
+
+  #q {
+    -webkit-app-region: no-drag;
+    width: 100%;
+    padding: 10px 12px;
+    font: inherit;
+    color: var(--ink);
+    background: var(--field);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    outline: none;
+    -webkit-user-select: text;
+  }
+  #q::placeholder { color: var(--ink-dim); }
+  #q:focus { border-color: var(--edge); background: rgba(255,255,255,0.07); }
+  #q:disabled { opacity: .5; }
+
+  /* The specialists. You watch one take the question. */
+  #crew { display: flex; gap: 18px; padding: 0 17px 14px; }
+  .agent {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--ink-dim);
+    transition: color .25s ease;
+  }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: currentColor; opacity: .32;
+    transition: opacity .25s ease, transform .25s ease;
+  }
+  .agent[data-on="1"] { color: var(--hue); }
+  .agent[data-on="1"] .dot {
+    opacity: 1; transform: scale(1.35);
+    animation: breathe 1.4s ease-in-out infinite;
+  }
+  @keyframes breathe { 50% { opacity: .35; transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    .agent[data-on="1"] .dot { animation: none; }
+  }
+
+  main { flex: 1; padding: 0 17px 16px; overflow-y: auto; -webkit-user-select: text; }
+
+  #empty {
+    height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 14px; color: var(--ink-dim); font-size: 13px;
+    text-align: center; padding: 0 24px 40px;
+  }
+  #empty img { width: 56px; height: 56px; opacity: .5; }
+  #empty.gone { display: none; }
+
+  .turn { padding-bottom: 20px; }
+  .turn + .turn { border-top: 1px solid var(--edge); padding-top: 20px; }
+  .asked { color: var(--ink-dim); font-size: 13px; margin-bottom: 10px; }
+  .by { font-size: 11px; color: var(--hue, var(--ink-dim)); margin-bottom: 8px; }
+
+  .body h1, .body h2, .body h3 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; }
+  .body h1:first-child, .body h2:first-child, .body h3:first-child { margin-top: 0; }
+  .body p { margin: 0 0 10px; }
+  .body ul, .body ol { margin: 0 0 10px; padding-left: 20px; }
+  .body li { margin-bottom: 3px; }
+  .body strong { font-weight: 600; }
+  .body code {
+    font-size: 12.5px; padding: 1px 5px; border-radius: 4px;
+    background: rgba(255,255,255,0.08);
+  }
+  .body hr { border: 0; border-top: 1px solid var(--edge); margin: 16px 0; }
+  .body > *:last-child { margin-bottom: 0; }
+  .err { color: #d98080; }
+</style>
+</head>
+<body>
+
+<header>
+  <input id="q" placeholder="Ask Zopro" autofocus autocomplete="off" spellcheck="false">
+</header>
+
+<div id="crew">
+  <div class="agent" data-route="internship" style="--hue: var(--internship)"><span class="dot"></span>Internship</div>
+  <div class="agent" data-route="zmoney" style="--hue: var(--zmoney)"><span class="dot"></span>Zmoney</div>
+  <div class="agent" data-route="hungryvar" style="--hue: var(--hungryvar)"><span class="dot"></span>Hungryvar</div>
+  <div class="agent" data-route="direct" style="--hue: var(--direct)"><span class="dot"></span>Zopro</div>
+</div>
+
+<main>
+  <div id="empty">
+    <img src="logo.png" alt="" onerror="this.style.display='none'">
+    <div>Ask about your internship, your portfolio, or what you&rsquo;re eating this week.</div>
+  </div>
+  <div id="log"></div>
+</main>
+
+<script>
+const q = document.getElementById('q');
+const log = document.getElementById('log');
+const empty = document.getElementById('empty');
+const agents = [...document.querySelectorAll('.agent')];
+
+function light(route) {
+  agents.forEach(a => a.dataset.on = a.dataset.route === route ? '1' : '0');
+}
+
+function addTurn(question) {
+  empty.classList.add('gone');
+  const turn = document.createElement('div');
+  turn.className = 'turn';
+  turn.innerHTML =
+    '<div class="asked"></div><div class="by">thinking&hellip;</div><div class="body"></div>';
+  turn.querySelector('.asked').textContent = question;
+  log.appendChild(turn);
+  turn.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  return turn;
+}
+
+async function ask(question) {
+  const turn = addTurn(question);
+  const by = turn.querySelector('.by');
+  const body = turn.querySelector('.body');
+
+  q.disabled = true;
+  agents.forEach(a => a.dataset.on = '1');
+
+  let res;
+  try {
+    res = await fetch('http://127.0.0.1:8420/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question })
+    }).then(r => r.json());
+  } catch (e) {
+    light(null);
+    by.textContent = '';
+    body.className = 'body err';
+    body.textContent = 'No answer from Zopro. Check the server is running.';
+    q.disabled = false;
+    q.focus();
+    return;
+  }
+
+  light(res.route);
+  by.textContent = res.specialist || 'Zopro';
+  by.style.setProperty('--hue', 'var(--' + (res.route || 'direct') + ')');
+
+  if (res.error) {
+    body.className = 'body err';
+    body.textContent = res.error;
+  } else {
+    body.innerHTML = marked.parse(res.answer);
+  }
+
+  q.disabled = false;
+  q.focus();
+}
+
+q.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && q.value.trim()) {
+    ask(q.value.trim());
+    q.value = '';
+  }
+  if (e.key === 'Escape') window.close();
+});
+
+window.addEventListener('focus', () => q.focus());
+</script>
+</body>
+</html>

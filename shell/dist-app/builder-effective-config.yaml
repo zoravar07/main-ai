@@ -1,0 +1,18 @@
+directories:
+  output: dist-app
+  buildResources: build
+appId: com.zoravar.zopro
+productName: Zopro
+files:
+  - filter:
+      - main.js
+      - index.html
+      - workspace.html
+      - package.json
+mac:
+  category: public.app-category.productivity
+  target: dir
+  identity: null
+  extendInfo:
+    LSUIElement: true
+electronVersion: 32.3.3
