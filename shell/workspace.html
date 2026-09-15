@@ -264,23 +264,30 @@ document.body.dataset.busy='0';q.disabled=false;q.focus();conv.scrollTop=conv.sc
 if((spoken||spk.dataset.on==='1')&&!res.error&&res.answer){
   fetch(API+'/speak',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({text:res.answer})}).catch(function(){});
-  if(spoken)setTimeout(function(){if(document.body.dataset.speak==='1')speakPending=true},400)}
+  if(spoken){speakPending=true;sawSpeaking=false;console.log('[followup] speakPending armed (immediate)')}}
 load()}
 q.addEventListener('keydown',function(e){
 if(e.key==='Enter'&&q.value.trim()){ask(q.value.trim());q.value=''}
 if(e.key==='Escape'){setConv(false);fetch(API+'/shush',{method:'POST'}).catch(function(){});document.body.dataset.speak='0';speakPending=false}});
 var rec=null,chunks=[],silCtx=null;
 var speakPending=false;
+var sawSpeaking=false;
 var recWasFollowup=false;
 var lastTranscriptRejected=0;
 function maybeFollowup(){
-  if(lastTranscriptRejected)return;
-  if(rec&&rec.state==='recording')return;
+  console.log('[followup] maybeFollowup called, lastTranscriptRejected='+lastTranscriptRejected+' rec.state='+(rec&&rec.state));
+  if(lastTranscriptRejected){console.log('[followup] guard: lastTranscriptRejected, not reopening');return}
+  if(rec&&rec.state==='recording'){console.log('[followup] guard: already recording, not reopening');return}
+  console.log('[followup] reopening mic');
   toggleVoice(true)}
 (function pollSpeaking(){
   fetch(API+'/speaking').then(function(r){return r.json()}).then(function(d){
+    console.log('[followup] /speaking poll -> speaking='+d.speaking+' speakPending='+speakPending+' sawSpeaking='+sawSpeaking);
     document.body.dataset.speak=d.speaking?'1':'0';
-    if(speakPending&&!d.speaking){speakPending=false;maybeFollowup()}
+    if(speakPending){
+      if(d.speaking)sawSpeaking=true;
+      else if(sawSpeaking){speakPending=false;sawSpeaking=false;maybeFollowup()}
+    }
   }).catch(function(){}).then(function(){setTimeout(pollSpeaking,700)})})();
 
 function silenceWatch(stream,giveupMs,threshold){
@@ -298,6 +305,7 @@ function silenceWatch(stream,giveupMs,threshold){
       var peak=0;
       for(var i=0;i<buf.length;i++){var d=Math.abs(buf[i]-128);if(d>peak)peak=d}
       var loud=peak>(threshold||6);
+      console.log('[silenceWatch] peak='+peak+' loud='+loud);
       if(loud){spoke=true;quietSince=0;
         hint.textContent='Listening\u2026'}
       else if(spoke){
@@ -327,6 +335,7 @@ try{var r=await fetch(API+'/transcribe',{method:'POST',body:fd}).then(function(r
 if(r.error){hint.textContent=r.error;return}
 var text=(r.text||'').trim();
 var words=text?text.split(/\s+/).filter(Boolean):[];
+console.log('[transcript] "'+text+'" chars='+text.length+' words='+words.length+' -> '+((text&&text.length>=8&&words.length>=3)?'accepted':'rejected'));
 if(text&&text.length>=8&&words.length>=3){
   lastTranscriptRejected=0;
   hint.textContent='';
