@@ -271,7 +271,10 @@ if(e.key==='Enter'&&q.value.trim()){ask(q.value.trim());q.value=''}
 if(e.key==='Escape'){setConv(false);fetch(API+'/shush',{method:'POST'}).catch(function(){});document.body.dataset.speak='0';speakPending=false}});
 var rec=null,chunks=[],silCtx=null;
 var speakPending=false;
+var recWasFollowup=false;
+var lastTranscriptRejected=0;
 function maybeFollowup(){
+  if(lastTranscriptRejected)return;
   if(rec&&rec.state==='recording')return;
   toggleVoice(true)}
 (function pollSpeaking(){
@@ -280,7 +283,7 @@ function maybeFollowup(){
     if(speakPending&&!d.speaking){speakPending=false;maybeFollowup()}
   }).catch(function(){}).then(function(){setTimeout(pollSpeaking,700)})})();
 
-function silenceWatch(stream,giveupMs){
+function silenceWatch(stream,giveupMs,threshold){
   // Stop ~2s after speech ends. Never stops before speech starts, so a slow
   // beginning is fine.
   try{
@@ -294,7 +297,7 @@ function silenceWatch(stream,giveupMs){
       an.getByteTimeDomainData(buf);
       var peak=0;
       for(var i=0;i<buf.length;i++){var d=Math.abs(buf[i]-128);if(d>peak)peak=d}
-      var loud=peak>6;
+      var loud=peak>(threshold||6);
       if(loud){spoke=true;quietSince=0;
         hint.textContent='Listening\u2026'}
       else if(spoke){
@@ -313,6 +316,7 @@ function silenceWatch(stream,giveupMs){
 async function toggleVoice(followup){
 if(rec&&rec.state==='recording'){rec.requestData();setTimeout(function(){rec.stop()},300);return}
 clearTimeout(idleTimer);
+recWasFollowup=!!followup;
 try{var st=await navigator.mediaDevices.getUserMedia({audio:true});
 chunks=[];rec=new MediaRecorder(st);
 rec.ondataavailable=function(e){chunks.push(e.data)};
@@ -321,10 +325,21 @@ document.body.dataset.rec='0';setMode('idle',null,true);hint.textContent='Transc
 var fd=new FormData();fd.append('audio',new Blob(chunks,{type:'audio/webm'}),'clip.webm');
 try{var r=await fetch(API+'/transcribe',{method:'POST',body:fd}).then(function(r){return r.json()});
 if(r.error){hint.textContent=r.error;return}
-hint.textContent='';
-if(r.text&&r.text.trim())ask(r.text.trim(),true);else hint.textContent='Nothing heard.'}
+var text=(r.text||'').trim();
+var words=text?text.split(/\s+/).filter(Boolean):[];
+if(text&&text.length>=8&&words.length>=3){
+  lastTranscriptRejected=0;
+  hint.textContent='';
+  ask(text,true)
+}else{
+  lastTranscriptRejected++;
+  if(recWasFollowup&&lastTranscriptRejected<2){
+    hint.textContent='';
+    toggleVoice(true)
+  }else{
+    hint.textContent='Nothing heard.'}}}
 catch(e){hint.textContent='Transcription failed.'}};
-rec.start(250);silenceWatch(st,followup?6000:12000);document.body.dataset.rec='1';setMode('rec',null);hint.textContent='Listening - click the orb to stop'}
+rec.start(250);silenceWatch(st,followup?6000:12000,followup?16:6);document.body.dataset.rec='1';setMode('rec',null);hint.textContent='Listening - click the orb to stop'}
 catch(e){hint.textContent='Microphone unavailable. Allow access in System Settings.'}}
 const URLS={zmoney:'http://localhost:5173',hungryvar:'https://hungryvar.vercel.app',
 calendar:'https://calendar.google.com',mail:'https://mail.google.com'};
