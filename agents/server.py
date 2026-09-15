@@ -13,7 +13,8 @@ import tempfile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from zopro import classify, ask_internship_buddy, ask_zmoney, ask_hungryvar, answer_directly
+from zopro import (classify, ask_internship_buddy, ask_zmoney, ask_hungryvar,
+                    ask_calendar, ask_gmail, ask_researcher, ask_apps, answer_directly)
 from fillers import pick_generic
 
 app = FastAPI(title="Zopro")
@@ -29,6 +30,10 @@ SPECIALISTS = {
     "internship": ("Internship & Career Assistant", ask_internship_buddy),
     "zmoney": ("Zmoney Analyst", ask_zmoney),
     "hungryvar": ("Hungryvar Assistant", ask_hungryvar),
+    "calendar": ("Calendar Assistant", ask_calendar),
+    "mail": ("Mail Assistant", ask_gmail),
+    "research": ("Research Assistant", ask_researcher),
+    "apps": ("Mac Assistant", ask_apps),
 }
 
 
