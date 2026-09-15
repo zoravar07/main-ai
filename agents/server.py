@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from zopro import classify, ask_internship_buddy, ask_zmoney, ask_hungryvar, answer_directly
+from fillers import pick_filler
 
 app = FastAPI(title="Zopro")
 
@@ -33,6 +34,7 @@ SPECIALISTS = {
 
 class Question(BaseModel):
     question: str
+    spoken: bool = False
 
 
 @app.get("/health")
@@ -48,6 +50,16 @@ def status():
     return full_status()
 
 
+def _speak_now(text: str):
+    """Fire-and-forget TTS, used for the voice filler said while the real
+    answer is still being generated."""
+    import shutil, subprocess, time
+    if not shutil.which("say"):
+        return
+    _speaking["until"] = time.time() + max(3, len(text) / 14)
+    subprocess.Popen(["say", "-v", "Jamie (Premium)", "-r", "185", text])
+
+
 @app.post("/ask")
 def ask(q: Question):
     """Classify, dispatch, and return the answer plus which specialist handled it.
@@ -60,6 +72,9 @@ def ask(q: Question):
         route = classify(question)
     except Exception as e:
         return {"error": f"Classifier failed: {e}"}
+
+    if q.spoken:
+        _speak_now(pick_filler(route))
 
     name, handler = SPECIALISTS.get(route, ("Zopro", answer_directly))
 

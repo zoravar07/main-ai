@@ -21,9 +21,11 @@ grid-template-columns:250px 1fr 250px;grid-template-rows:42px 1fr auto}
 #spk{background:none;border:1px solid rgba(155,124,255,.2);border-radius:20px;padding:4px 13px;color:var(--dim);cursor:pointer;font:inherit;font-size:9px;letter-spacing:.17em;text-transform:uppercase}
 #spk[data-on="1"]{color:var(--violet);border-color:var(--violet)}
 #stoprow{height:22px;margin-bottom:6px;text-align:center;opacity:0;transition:opacity .3s;pointer-events:none}
-body[data-busy="1"] #stoprow,body[data-rec="1"] #stoprow{opacity:1;pointer-events:auto}
-#stop{background:none;border:1px solid rgba(224,120,142,.3);border-radius:20px;padding:4px 13px;color:#e0788e;cursor:pointer;font:inherit;font-size:9px;letter-spacing:.17em;text-transform:uppercase}
-#stop:hover{border-color:#e0788e}
+body[data-busy="1"] #stoprow,body[data-rec="1"] #stoprow,body[data-speak="1"] #stoprow{opacity:1;pointer-events:auto}
+#stop,#shush{background:none;border:1px solid rgba(224,120,142,.3);border-radius:20px;padding:4px 13px;margin-left:6px;color:#e0788e;cursor:pointer;font:inherit;font-size:9px;letter-spacing:.17em;text-transform:uppercase}
+#stop:hover,#shush:hover{border-color:#e0788e}
+#shush{display:none}
+body[data-speak="1"] #shush{display:inline-block}
 #tog{background:none;border:1px solid rgba(155,124,255,.2);border-radius:20px;
 padding:4px 13px;color:var(--dim);cursor:pointer;font:inherit;font-size:9px;
 letter-spacing:.17em;text-transform:uppercase}
@@ -98,18 +100,20 @@ outline:none;-webkit-user-select:text}
 <div id="label"><div class="t">ZOPRO</div><div class="s" id="lsub">Standing by</div></div>
 <div id="conv"></div></div>
 <div class="col" id="R"></div>
-<div id="dock"><div id="stoprow"><button id="stop">Stop</button></div><input id="q" placeholder="Ask Zopro" autocomplete="off" spellcheck="false" autofocus>
+<div id="dock"><div id="stoprow"><button id="stop">Stop</button><button id="shush">Shush</button></div><input id="q" placeholder="Ask Zopro" autocomplete="off" spellcheck="false" autofocus>
 <div id="hint"></div></div>
 </div>
 <script>
-document.title = 'PATCH-LIVE ' + Date.now();
 const API='http://127.0.0.1:8420';
 const $=function(s){return document.querySelector(s)};
 const q=$('#q'),conv=$('#conv'),_hintEl=$('#hint'),lsub=$('#lsub'),tog=$('#tog'),spk={dataset:{on:'0'}};
 $('#stop').addEventListener('click',function(){
   if(rec&&rec.state==='recording'){try{rec.stop()}catch(e){}rec=null}
   fetch(API+'/stop',{method:'POST'}).catch(function(){});
-  document.body.dataset.rec='0';document.body.dataset.busy='0';setMode('idle',null);hint.textContent='Stopped'});
+  document.body.dataset.rec='0';document.body.dataset.busy='0';document.body.dataset.speak='0';setMode('idle',null);hint.textContent='Stopped'});
+$('#shush').addEventListener('click',function(){
+  fetch(API+'/shush',{method:'POST'}).catch(function(){});
+  document.body.dataset.speak='0'});
 var _hintT=null;
 var hint={set textContent(v){
   _hintEl.textContent=v;
@@ -235,9 +239,15 @@ want=(COL[r]||COL[m]||COL.idle).slice();
 document.documentElement.style.setProperty('--live',r?'var(--'+r+')':'var(--violet)');
 document.querySelectorAll('.card').forEach(function(c){c.dataset.hot=(c.dataset.route===r)?'1':'0'});
 lsub.textContent=(m==='rec')?'Listening':(m==='think')?'Working':'Standing by'}
+var speakTimer=null;
+function speaking(ms){
+document.body.dataset.speak='1';
+clearTimeout(speakTimer);
+speakTimer=setTimeout(function(){document.body.dataset.speak='0'},ms)}
 async function ask(question,spoken){
 clearTimeout(idleTimer);
 if(!spoken)setConv(true);
+if(spoken)speaking(4000);
 document.body.dataset.busy='1';setMode('think',null);q.disabled=true;
 var turn=document.createElement('div');turn.className='turn';
 var mine=document.createElement('div');mine.className='mine';mine.textContent=question;
@@ -247,7 +257,7 @@ turn.appendChild(mine);turn.appendChild(by);turn.appendChild(bd);
 conv.appendChild(turn);conv.scrollTop=conv.scrollHeight;
 var res;
 try{res=await fetch(API+'/ask',{method:'POST',headers:{'Content-Type':'application/json'},
-body:JSON.stringify({question:question})}).then(function(r){return r.json()})}
+body:JSON.stringify({question:question,spoken:!!spoken})}).then(function(r){return r.json()})}
 catch(e){setMode('idle',null);by.textContent='';bd.className='bd er';
 bd.textContent='No answer from Zopro. The server is not responding.';
 q.disabled=false;q.focus();return}
@@ -257,13 +267,14 @@ by.style.setProperty('--hue','var(--'+(res.route||'direct')+')');
 if(res.error){bd.className='bd er';bd.textContent=res.error}
 else bd.innerHTML=marked.parse(res.answer||'');
 document.body.dataset.busy='0';q.disabled=false;q.focus();conv.scrollTop=conv.scrollHeight;idleTimer=setTimeout(function(){setMode('idle',null)},6000);
-if((spoken||spk.dataset.on==='1')&&!res.error&&res.answer)
+if((spoken||spk.dataset.on==='1')&&!res.error&&res.answer){
+  speaking(Math.max(3000,res.answer.length/14*1000));
   fetch(API+'/speak',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({text:res.answer})}).catch(function(){});
+    body:JSON.stringify({text:res.answer})}).catch(function(){})}
 load()}
 q.addEventListener('keydown',function(e){
 if(e.key==='Enter'&&q.value.trim()){ask(q.value.trim());q.value=''}
-if(e.key==='Escape'){setConv(false);fetch(API+'/shush',{method:'POST'}).catch(function(){})}});
+if(e.key==='Escape'){setConv(false);fetch(API+'/shush',{method:'POST'}).catch(function(){});document.body.dataset.speak='0'}});
 var rec=null,chunks=[],silCtx=null;
 
 function silenceWatch(stream){
