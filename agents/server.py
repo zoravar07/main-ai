@@ -182,6 +182,8 @@ def ask(q: Question):
 
 
 _whisper = None
+# Whisper's own default cutoff for treating a segment as silence.
+NO_SPEECH_MAX = 0.6
 
 
 @app.post("/transcribe")
@@ -201,11 +203,20 @@ async def transcribe(audio: UploadFile = File(...)):
         path = f.name
     try:
         segments, _ = _whisper.transcribe(path, beam_size=1)
-        return {"text": " ".join(x.text for x in segments).strip()}
+        segments = list(segments)
     except Exception as e:
         return {"error": f"Transcription failed: {e}"}
     finally:
         os.unlink(path)
+
+    if not segments:
+        return {"text": "", "no_speech_prob": None, "avg_logprob": None}
+    kept = [s for s in segments if s.no_speech_prob <= NO_SPEECH_MAX]
+    return {
+        "text": " ".join(s.text for s in kept).strip(),
+        "no_speech_prob": max(s.no_speech_prob for s in segments),
+        "avg_logprob": sum(s.avg_logprob for s in segments) / len(segments),
+    }
 
 
 class Speech(BaseModel):
