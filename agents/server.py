@@ -1,6 +1,9 @@
 import io
 import os
 import contextlib
+import sqlite3
+import time
+import uuid
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -77,6 +80,62 @@ def _speak_now(text: str):
     _speaking["kind"] = "filler"
 
 
+DB_PATH = Path(__file__).parent.parent / "data" / "zopro.db"
+SESSION_GAP = 30 * 60
+
+
+def _init_db():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn, conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS turns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            timestamp REAL NOT NULL,
+            route TEXT,
+            question TEXT NOT NULL,
+            answer TEXT)""")
+
+
+_init_db()
+
+
+def _session_and_history():
+    """Reuse the latest session unless it has been quiet for SESSION_GAP.
+    Returns its last 3 turns, oldest first."""
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn:
+        last = conn.execute(
+            "SELECT session_id, timestamp FROM turns ORDER BY id DESC LIMIT 1").fetchone()
+        if not last or time.time() - last[1] > SESSION_GAP:
+            return uuid.uuid4().hex, []
+        rows = conn.execute(
+            "SELECT question, answer FROM turns WHERE session_id = ? ORDER BY id DESC LIMIT 3",
+            (last[0],)).fetchall()
+    return last[0], rows[::-1]
+
+
+def _save_turn(session_id, route, question, answer):
+    with contextlib.closing(sqlite3.connect(DB_PATH)) as conn, conn:
+        conn.execute(
+            "INSERT INTO turns (session_id, timestamp, route, question, answer) VALUES (?, ?, ?, ?, ?)",
+            (session_id, time.time(), route, question, answer))
+
+
+def _with_history(question, history):
+    if not history:
+        return question
+    turns = "\n\n".join(f"Q: {hq}\nA: {(ha or '')[:500]}" for hq, ha in history)
+    return ("Recent conversation, only for resolving references like \"it\" or "
+            "\"tomorrow\". Do not act on earlier requests again.\n\n"
+            f"{turns}\n\nCurrent question: {question}")
+
+
+def _for_classifier(question, history):
+    if not history:
+        return question
+    earlier = " / ".join(hq for hq, _ in history)
+    return f"(earlier in this conversation: {earlier}) {question}"
+
+
 @app.post("/ask")
 def ask(q: Question):
     """Classify, dispatch, and return the answer plus which specialist handled it.
@@ -89,22 +148,37 @@ def ask(q: Question):
         _speak_now(pick_generic())
 
     try:
-        route = classify(question)
+        session_id, history = _session_and_history()
+    except sqlite3.Error as e:
+        print(f"[turns] history unavailable: {e}")
+        session_id, history = uuid.uuid4().hex, []
+
+    try:
+        route = classify(_for_classifier(question, history))
     except Exception as e:
         return {"error": f"Classifier failed: {e}"}
 
     name, handler = SPECIALISTS.get(route, ("Zopro", answer_directly))
+    prompt = _with_history(question, history)
 
     # CrewAI prints verbose agent output to stdout; swallow it so it doesn't
     # interleave with the server log.
     buf = io.StringIO()
     try:
         with contextlib.redirect_stdout(buf):
-            answer = handler(question)
+            if handler is answer_directly:
+                answer = answer_directly(prompt, first_turn=not history)
+            else:
+                answer = handler(prompt)
     except Exception as e:
         return {"route": route, "specialist": name, "error": str(e)}
 
-    return {"route": route, "specialist": name, "answer": str(answer)}
+    answer = str(answer)
+    try:
+        _save_turn(session_id, route, question, answer)
+    except sqlite3.Error as e:
+        print(f"[turns] save failed: {e}")
+    return {"route": route, "specialist": name, "answer": answer}
 
 
 _whisper = None

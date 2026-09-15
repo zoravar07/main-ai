@@ -184,7 +184,7 @@ import claude_cli as _cc
 def ask_gmail(question: str):
     """Reading is free via Claude Code. Drafting still needs the agent, since
     it has to call the Gmail API to save the draft."""
-    low=question.lower()
+    low=question.rsplit("\n\n",1)[-1].lower()
     if any(w in low for w in ("draft","reply","write","respond","compose","send")):
         return _ask_gmail_agent(question)
     try:

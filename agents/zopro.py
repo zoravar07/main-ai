@@ -69,23 +69,26 @@ def classify(question: str) -> str:
     return "direct"
 
 
-def answer_directly(question: str):
+def answer_directly(question: str, first_turn: bool = True):
     """General chat, free via Claude Code. Memory is fetched first so it never
     has to invent facts about Zoravar."""
     ctx = ""
-    low = question.lower()
+    current = question.rsplit("\n\n", 1)[-1]
+    low = current.lower()
     if any(w in low for w in ("i ","my ","me ","zoravar")):
         try:
             from internship_buddy import query_memory
-            ctx = query_memory.run(question)
+            ctx = query_memory.run(current)
         except Exception:
             pass
+    greeting = ("Greet him by name, briefly, like a friend would." if first_turn
+                else "This is a continuing conversation, so do not greet him or open with his name.")
     return claude_cli.answer(question,
         "You are Zopro, a personal assistant for Zoravar. If asked your name, "
         "what you are, or what model you run on, say you're Zopro — never "
         "mention Claude, Anthropic, or Sonnet. Never invent facts about him, "
         "his work or his projects. If the data below does not answer it, say "
-        "you do not know. Greet him by name, briefly, like a friend would.", ctx)
+        "you do not know. " + greeting, ctx)
 
 
 def ask_zopro(question: str):
