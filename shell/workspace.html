@@ -274,11 +274,11 @@ var speakPending=false;
 function maybeFollowup(){
   if(rec&&rec.state==='recording')return;
   toggleVoice(true)}
-setInterval(function(){
-  fetch(API+'/status').then(function(r){return r.json()}).then(function(d){
+(function pollSpeaking(){
+  fetch(API+'/speaking').then(function(r){return r.json()}).then(function(d){
     document.body.dataset.speak=d.speaking?'1':'0';
     if(speakPending&&!d.speaking){speakPending=false;maybeFollowup()}
-  }).catch(function(){})},700);
+  }).catch(function(){}).then(function(){setTimeout(pollSpeaking,700)})})();
 
 function silenceWatch(stream,giveupMs){
   // Stop ~2s after speech ends. Never stops before speech starts, so a slow
@@ -380,11 +380,11 @@ document.querySelectorAll('.card').forEach(function(k){k.dataset.hot=(k.dataset.
 document.addEventListener('click',function(e){
 var c=e.target.closest('.card[data-url]');
 if(c)window.open(c.dataset.url,'_blank')});
-setInterval(function(){
+(function pollWoke(){
   fetch(API+'/woke').then(function(r){return r.json()}).then(function(d){
     if(d.woke){
       if(rec&&rec.state==='recording'){try{rec.stop()}catch(e){}rec=null}
-      setTimeout(function(){toggleVoice()},150)}}).catch(function(){})},800);
+      setTimeout(function(){toggleVoice()},150)}}).catch(function(){}).then(function(){setTimeout(pollWoke,800)})})();
 function alignBar(){
   var col=document.getElementById('R'),gap=document.getElementById('gap'),
       wake=document.getElementById('wake');

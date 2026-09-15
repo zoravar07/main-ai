@@ -53,6 +53,15 @@ def status():
     return out
 
 
+@app.get("/speaking")
+def speaking_state():
+    """Cheap poll target for the Shush button and follow-up-mic timing.
+    Unlike /status this does no external work — no yfinance, Gmail, or
+    Supabase calls — just reads one in-memory timestamp."""
+    import time
+    return {"speaking": time.time() < _speaking["until"]}
+
+
 def _speak_now(text: str):
     """Fire-and-forget TTS, used for the voice filler said while the real
     answer is still being generated."""
