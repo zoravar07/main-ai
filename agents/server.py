@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from zopro import classify, ask_internship_buddy, ask_zmoney, ask_hungryvar, answer_directly
-from fillers import pick_filler
+from fillers import pick_generic
 
 app = FastAPI(title="Zopro")
 
@@ -47,7 +47,10 @@ def status():
     """Live figures for the workspace tiles. Real sources only — anything
     unreachable reports available: false rather than a placeholder."""
     from status import full_status
-    return full_status()
+    import time
+    out = full_status()
+    out["speaking"] = time.time() < _speaking["until"]
+    return out
 
 
 def _speak_now(text: str):
@@ -68,13 +71,13 @@ def ask(q: Question):
     if not question:
         return {"error": "Empty question."}
 
+    if q.spoken:
+        _speak_now(pick_generic())
+
     try:
         route = classify(question)
     except Exception as e:
         return {"error": f"Classifier failed: {e}"}
-
-    if q.spoken:
-        _speak_now(pick_filler(route))
 
     name, handler = SPECIALISTS.get(route, ("Zopro", answer_directly))
 
@@ -154,6 +157,7 @@ def shush():
     """Stop whatever is being spoken."""
     import subprocess
     subprocess.run(["pkill", "-f", "^say "], check=False)
+    _speaking["until"] = 0.0
     return {"ok": True}
 
 

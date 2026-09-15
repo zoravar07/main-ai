@@ -98,3 +98,7 @@ FILLERS = {
 def pick_filler(route: str) -> str:
     pool = FILLERS.get(route, []) + FILLERS["generic"]
     return random.choice(pool)
+
+
+def pick_generic() -> str:
+    return random.choice(FILLERS["generic"])

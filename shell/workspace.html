@@ -110,10 +110,10 @@ const q=$('#q'),conv=$('#conv'),_hintEl=$('#hint'),lsub=$('#lsub'),tog=$('#tog')
 $('#stop').addEventListener('click',function(){
   if(rec&&rec.state==='recording'){try{rec.stop()}catch(e){}rec=null}
   fetch(API+'/stop',{method:'POST'}).catch(function(){});
-  document.body.dataset.rec='0';document.body.dataset.busy='0';document.body.dataset.speak='0';setMode('idle',null);hint.textContent='Stopped'});
+  document.body.dataset.rec='0';document.body.dataset.busy='0';document.body.dataset.speak='0';speakPending=false;setMode('idle',null);hint.textContent='Stopped'});
 $('#shush').addEventListener('click',function(){
   fetch(API+'/shush',{method:'POST'}).catch(function(){});
-  document.body.dataset.speak='0'});
+  document.body.dataset.speak='0';speakPending=false});
 var _hintT=null;
 var hint={set textContent(v){
   _hintEl.textContent=v;
@@ -239,15 +239,9 @@ want=(COL[r]||COL[m]||COL.idle).slice();
 document.documentElement.style.setProperty('--live',r?'var(--'+r+')':'var(--violet)');
 document.querySelectorAll('.card').forEach(function(c){c.dataset.hot=(c.dataset.route===r)?'1':'0'});
 lsub.textContent=(m==='rec')?'Listening':(m==='think')?'Working':'Standing by'}
-var speakTimer=null;
-function speaking(ms){
-document.body.dataset.speak='1';
-clearTimeout(speakTimer);
-speakTimer=setTimeout(function(){document.body.dataset.speak='0'},ms)}
 async function ask(question,spoken){
 clearTimeout(idleTimer);
 if(!spoken)setConv(true);
-if(spoken)speaking(4000);
 document.body.dataset.busy='1';setMode('think',null);q.disabled=true;
 var turn=document.createElement('div');turn.className='turn';
 var mine=document.createElement('div');mine.className='mine';mine.textContent=question;
@@ -268,16 +262,25 @@ if(res.error){bd.className='bd er';bd.textContent=res.error}
 else bd.innerHTML=marked.parse(res.answer||'');
 document.body.dataset.busy='0';q.disabled=false;q.focus();conv.scrollTop=conv.scrollHeight;idleTimer=setTimeout(function(){setMode('idle',null)},6000);
 if((spoken||spk.dataset.on==='1')&&!res.error&&res.answer){
-  speaking(Math.max(3000,res.answer.length/14*1000));
   fetch(API+'/speak',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({text:res.answer})}).catch(function(){})}
+    body:JSON.stringify({text:res.answer})}).catch(function(){});
+  if(spoken)setTimeout(function(){if(document.body.dataset.speak==='1')speakPending=true},400)}
 load()}
 q.addEventListener('keydown',function(e){
 if(e.key==='Enter'&&q.value.trim()){ask(q.value.trim());q.value=''}
-if(e.key==='Escape'){setConv(false);fetch(API+'/shush',{method:'POST'}).catch(function(){});document.body.dataset.speak='0'}});
+if(e.key==='Escape'){setConv(false);fetch(API+'/shush',{method:'POST'}).catch(function(){});document.body.dataset.speak='0';speakPending=false}});
 var rec=null,chunks=[],silCtx=null;
+var speakPending=false;
+function maybeFollowup(){
+  if(rec&&rec.state==='recording')return;
+  toggleVoice(true)}
+setInterval(function(){
+  fetch(API+'/status').then(function(r){return r.json()}).then(function(d){
+    document.body.dataset.speak=d.speaking?'1':'0';
+    if(speakPending&&!d.speaking){speakPending=false;maybeFollowup()}
+  }).catch(function(){})},700);
 
-function silenceWatch(stream){
+function silenceWatch(stream,giveupMs){
   // Stop ~2s after speech ends. Never stops before speech starts, so a slow
   // beginning is fine.
   try{
@@ -300,14 +303,14 @@ function silenceWatch(stream){
           hint.textContent='';try{rec.requestData()}catch(e){}
           setTimeout(function(){if(rec&&rec.state==='recording')rec.stop()},250);
           try{silCtx.close()}catch(e){};return}}
-      else if(Date.now()-started>12000){
+      else if(Date.now()-started>(giveupMs||12000)){
         // never spoke at all, give up rather than record silence forever
         hint.textContent='Nothing heard.';
         try{rec.stop()}catch(e){};try{silCtx.close()}catch(e){};return}
       requestAnimationFrame(tick)})();
   }catch(e){}
 }
-async function toggleVoice(){
+async function toggleVoice(followup){
 if(rec&&rec.state==='recording'){rec.requestData();setTimeout(function(){rec.stop()},300);return}
 clearTimeout(idleTimer);
 try{var st=await navigator.mediaDevices.getUserMedia({audio:true});
@@ -321,7 +324,7 @@ if(r.error){hint.textContent=r.error;return}
 hint.textContent='';
 if(r.text&&r.text.trim())ask(r.text.trim(),true);else hint.textContent='Nothing heard.'}
 catch(e){hint.textContent='Transcription failed.'}};
-silenceWatch(st);rec.start(250);document.body.dataset.rec='1';setMode('rec',null);hint.textContent='Listening - click the orb to stop'}
+rec.start(250);silenceWatch(st,followup?6000:12000);document.body.dataset.rec='1';setMode('rec',null);hint.textContent='Listening - click the orb to stop'}
 catch(e){hint.textContent='Microphone unavailable. Allow access in System Settings.'}}
 const URLS={zmoney:'http://localhost:5173',hungryvar:'https://hungryvar.vercel.app',
 calendar:'https://calendar.google.com',mail:'https://mail.google.com'};
