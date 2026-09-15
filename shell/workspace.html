@@ -100,6 +100,7 @@ outline:none;-webkit-user-select:text}
 <div id="hint"></div></div>
 </div>
 <script>
+document.title = 'PATCH-LIVE ' + Date.now();
 const API='http://127.0.0.1:8420';
 const $=function(s){return document.querySelector(s)};
 const q=$('#q'),conv=$('#conv'),_hintEl=$('#hint'),lsub=$('#lsub'),tog=$('#tog'),spk={dataset:{on:'0'}};
@@ -216,7 +217,10 @@ cg.addColorStop(1,'rgba('+rgb+',0)');
 x.fillStyle=cg;x.beginPath();x.arc(cx,cy,R*.42,0,6.283);x.fill();
 requestAnimationFrame(frame)}
 frame();
-function setMode(m,r){mode=m;route=r||null;
+var idleTimer=null;
+function setMode(m,r,force){
+if(m==='idle'&&!force&&rec&&rec.state==='recording')return;
+mode=m;route=r||null;
 document.body.dataset.busy=(m==='think')?'1':'0';
 document.body.dataset.rec=(m==='rec')?'1':'0';
 want=(COL[r]||COL[m]||COL.idle).slice();
@@ -224,6 +228,7 @@ document.documentElement.style.setProperty('--live',r?'var(--'+r+')':'var(--viol
 document.querySelectorAll('.card').forEach(function(c){c.dataset.hot=(c.dataset.route===r)?'1':'0'});
 lsub.textContent=(m==='rec')?'Listening':(m==='think')?'Working':'Standing by'}
 async function ask(question,spoken){
+clearTimeout(idleTimer);
 setConv(true);document.body.dataset.busy='1';setMode('think',null);q.disabled=true;
 var turn=document.createElement('div');turn.className='turn';
 var mine=document.createElement('div');mine.className='mine';mine.textContent=question;
@@ -242,7 +247,7 @@ by.textContent=res.specialist||'Zopro';
 by.style.setProperty('--hue','var(--'+(res.route||'direct')+')');
 if(res.error){bd.className='bd er';bd.textContent=res.error}
 else bd.innerHTML=marked.parse(res.answer||'');
-document.body.dataset.busy='0';q.disabled=false;q.focus();conv.scrollTop=conv.scrollHeight;setTimeout(function(){setMode('idle',null)},6000);
+document.body.dataset.busy='0';q.disabled=false;q.focus();conv.scrollTop=conv.scrollHeight;idleTimer=setTimeout(function(){setMode('idle',null)},6000);
 if((spoken||spk.dataset.on==='1')&&!res.error&&res.answer)
   fetch(API+'/speak',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({text:res.answer})}).catch(function(){});
@@ -284,11 +289,12 @@ function silenceWatch(stream){
 }
 async function toggleVoice(){
 if(rec&&rec.state==='recording'){rec.requestData();setTimeout(function(){rec.stop()},300);return}
+clearTimeout(idleTimer);
 try{var st=await navigator.mediaDevices.getUserMedia({audio:true});
 chunks=[];rec=new MediaRecorder(st);
 rec.ondataavailable=function(e){chunks.push(e.data)};
 rec.onstop=async function(){st.getTracks().forEach(function(tr){tr.stop()});
-document.body.dataset.rec='0';setMode('idle',null);hint.textContent='Transcribing';
+document.body.dataset.rec='0';setMode('idle',null,true);hint.textContent='Transcribing';
 var fd=new FormData();fd.append('audio',new Blob(chunks,{type:'audio/webm'}),'clip.webm');
 try{var r=await fetch(API+'/transcribe',{method:'POST',body:fd}).then(function(r){return r.json()});
 if(r.error){hint.textContent=r.error;return}
