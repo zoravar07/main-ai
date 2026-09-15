@@ -45,10 +45,12 @@ box-shadow:0 0 30px -8px color-mix(in srgb,var(--hue) 60%,transparent);transform
 .kv{display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:11.5px;
 border-top:1px solid rgba(155,124,255,.08)}
 .kv span:first-child{color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kv span:last-child{white-space:nowrap}
+.kv span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kv.w span:last-child{color:#e0b45f}
+.kv.meal span:first-child{flex-shrink:0;overflow:visible;text-overflow:clip}
+.kv.meal span:last-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:right}
 .ev{padding:3.5px 0;font-size:11.5px;border-top:1px solid rgba(155,124,255,.08);display:flex;gap:8px}
-.ev .t{color:var(--dim);width:70px;flex-shrink:0}
+.ev .t{color:var(--dim);width:80px;flex-shrink:0;display:flex;justify-content:space-between;white-space:nowrap}
 .ev .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .off{color:var(--dim);font-size:11px}
 #mid{position:relative;overflow:hidden}
@@ -127,6 +129,12 @@ fetch(API+'/wake/state').then(function(r){return r.json()})
 
 function esc(s){var d=document.createElement('div');d.textContent=(s==null?'':s);return d.innerHTML}
 function n(v,d){return v==null?'\u2014':Number(v).toFixed(d||0)}
+function fmtWhen(w){
+if(!w)return '';
+var i=w.indexOf(' ');
+var d=esc((i===-1?w:w.slice(0,i)).replace(/-/g,'/'));
+var t=i===-1?'':esc(w.slice(i+1));
+return t?'<span class="d">'+d+'</span><span class="tm">'+t+'</span>':'<span class="d">'+d+'</span>'}
 var S=null,route=null,mode='idle';
 setInterval(function(){$('#clock').textContent=new Date().toLocaleTimeString('en-GB',
 {hour:'2-digit',minute:'2-digit',second:'2-digit'})},1000);
@@ -229,7 +237,8 @@ document.querySelectorAll('.card').forEach(function(c){c.dataset.hot=(c.dataset.
 lsub.textContent=(m==='rec')?'Listening':(m==='think')?'Working':'Standing by'}
 async function ask(question,spoken){
 clearTimeout(idleTimer);
-setConv(true);document.body.dataset.busy='1';setMode('think',null);q.disabled=true;
+if(!spoken)setConv(true);
+document.body.dataset.busy='1';setMode('think',null);q.disabled=true;
 var turn=document.createElement('div');turn.className='turn';
 var mine=document.createElement('div');mine.className='mine';mine.textContent=question;
 var by=document.createElement('div');by.className='by';by.textContent='Routing';
@@ -338,7 +347,7 @@ if(cvn.length)L+=card(null,'High conviction','latest run',rows(cvn,'ticker',func
 else L+=card('zmoney','Zmoney','','<div class="off">Database unreachable</div>');
 if(c.available){var ev=(c.events||[]).slice(0,6);
 R+=card('calendar','Today',ev.length?'':'clear',
-ev.length?ev.map(function(e){return '<div class="ev"><span class="t">'+esc(e.when)+
+ev.length?ev.map(function(e){return '<div class="ev"><span class="t">'+fmtWhen(e.when)+
 '</span><span class="n">'+esc(e.title)+'</span></div>'}).join(''):'<div class="off">Nothing scheduled</div>')}
 if(m.available)R+=card('mail','Inbox','','<div class="big">'+(m.unread==null?'\u2014':m.unread)+
 '</div><div class="sub">unread</div><div class="kv"><span>Today</span><span class="num">'+
@@ -346,7 +355,7 @@ if(m.available)R+=card('mail','Inbox','','<div class="big">'+(m.unread==null?'\u
 if(h.available&&h.today&&h.today.meals&&h.today.meals.length){
 var td=h.today;
 R+=card('hungryvar','Hungryvar',esc(td.future?td.day:'today'),
-td.meals.map(function(m){return '<div class="kv"><span>'+esc(m.slot)+
+td.meals.map(function(m){return '<div class="kv meal"><span>'+esc(m.slot)+
 '</span><span>'+esc(m.name)+'</span></div>'}).join(''))}
 else if(h.available&&h.week)R+=card('hungryvar','Hungryvar',esc(h.week.status||''),
 '<div class="big">'+esc(h.week.week_start)+'</div><div class="sub">week planned</div>');
