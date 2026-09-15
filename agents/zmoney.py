@@ -9,7 +9,7 @@ ANYTHINGLLM_URL = "http://localhost:3001/api/v1"
 ANYTHINGLLM_KEY = os.environ["ANYTHINGLLM_API_KEY"]
 WORKSPACE_SLUG = "zopro-brain"
 
-ZMONEY_DB = "/Users/zoravarsingh/Desktop/z money agent/data/z_money.db"
+ZMONEY_DB = "/Users/zoravarsingh/zmoney/data/z_money.db"
 
 
 @tool("Query Zoravar's Memory")

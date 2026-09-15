@@ -2,7 +2,7 @@
 import os, json, sqlite3, requests
 from datetime import datetime
 
-ZMONEY_DB = "/Users/zoravarsingh/Desktop/z money agent/data/z_money.db"
+ZMONEY_DB = "/Users/zoravarsingh/zmoney/data/z_money.db"
 SUPABASE_URL = (os.environ.get("VITE_SUPABASE_URL") or "").rstrip("/")
 SUPABASE_KEY = os.environ.get("VITE_SUPABASE_ANON_KEY", "")
 LAT, LON = 3.139, 101.6869
