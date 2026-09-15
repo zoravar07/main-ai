@@ -239,7 +239,7 @@ want=(COL[r]||COL[m]||COL.idle).slice();
 document.documentElement.style.setProperty('--live',r?'var(--'+r+')':'var(--violet)');
 document.querySelectorAll('.card').forEach(function(c){c.dataset.hot=(c.dataset.route===r)?'1':'0'});
 lsub.textContent=(m==='rec')?'Listening':(m==='think')?'Working':'Standing by'}
-async function ask(question,spoken){
+async function ask(question,spoken,followup){
 clearTimeout(idleTimer);
 if(!spoken)setConv(true);
 document.body.dataset.busy='1';setMode('think',null);q.disabled=true;
@@ -251,7 +251,7 @@ turn.appendChild(mine);turn.appendChild(by);turn.appendChild(bd);
 conv.appendChild(turn);conv.scrollTop=conv.scrollHeight;
 var res;
 try{res=await fetch(API+'/ask',{method:'POST',headers:{'Content-Type':'application/json'},
-body:JSON.stringify({question:question,spoken:!!spoken})}).then(function(r){return r.json()})}
+body:JSON.stringify({question:question,spoken:!!spoken,followup:!!followup})}).then(function(r){return r.json()})}
 catch(e){setMode('idle',null);by.textContent='';bd.className='bd er';
 bd.textContent='No answer from Zopro. The server is not responding.';
 q.disabled=false;q.focus();return}
@@ -282,11 +282,11 @@ function maybeFollowup(){
   toggleVoice(true)}
 (function pollSpeaking(){
   fetch(API+'/speaking').then(function(r){return r.json()}).then(function(d){
-    console.log('[followup] /speaking poll -> speaking='+d.speaking+' speakPending='+speakPending+' sawSpeaking='+sawSpeaking);
+    console.log('[followup] /speaking poll -> speaking='+d.speaking+' kind='+d.kind+' speakPending='+speakPending+' sawSpeaking='+sawSpeaking);
     document.body.dataset.speak=d.speaking?'1':'0';
     if(speakPending){
-      if(d.speaking)sawSpeaking=true;
-      else if(sawSpeaking){speakPending=false;sawSpeaking=false;maybeFollowup()}
+      if(d.speaking&&d.kind==='answer')sawSpeaking=true;
+      else if(sawSpeaking&&!d.speaking){speakPending=false;sawSpeaking=false;maybeFollowup()}
     }
   }).catch(function(){}).then(function(){setTimeout(pollSpeaking,700)})})();
 
@@ -339,7 +339,7 @@ console.log('[transcript] "'+text+'" chars='+text.length+' words='+words.length+
 if(text&&text.length>=8&&words.length>=3){
   lastTranscriptRejected=0;
   hint.textContent='';
-  ask(text,true)
+  ask(text,true,recWasFollowup)
 }else{
   lastTranscriptRejected++;
   if(recWasFollowup&&lastTranscriptRejected<2){

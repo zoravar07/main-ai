@@ -40,6 +40,7 @@ SPECIALISTS = {
 class Question(BaseModel):
     question: str
     spoken: bool = False
+    followup: bool = False
 
 
 @app.get("/health")
@@ -52,9 +53,8 @@ def status():
     """Live figures for the workspace tiles. Real sources only — anything
     unreachable reports available: false rather than a placeholder."""
     from status import full_status
-    import time
     out = full_status()
-    out["speaking"] = time.time() < _speaking["until"]
+    out["speaking"] = _is_speaking()
     return out
 
 
@@ -62,19 +62,19 @@ def status():
 def speaking_state():
     """Cheap poll target for the Shush button and follow-up-mic timing.
     Unlike /status this does no external work — no yfinance, Gmail, or
-    Supabase calls — just reads one in-memory timestamp."""
-    import time
-    return {"speaking": time.time() < _speaking["until"]}
+    Supabase calls — just checks whether the say process is still running."""
+    live = _is_speaking()
+    return {"speaking": live, "kind": _speaking["kind"] if live else None}
 
 
 def _speak_now(text: str):
     """Fire-and-forget TTS, used for the voice filler said while the real
     answer is still being generated."""
-    import shutil, subprocess, time
+    import shutil, subprocess
     if not shutil.which("say"):
         return
-    _speaking["until"] = time.time() + max(3, len(text) / 14)
-    subprocess.Popen(["say", "-v", "Jamie (Premium)", "-r", "185", text])
+    _speaking["proc"] = subprocess.Popen(["say", "-v", "Jamie (Premium)", "-r", "185", text])
+    _speaking["kind"] = "filler"
 
 
 @app.post("/ask")
@@ -85,7 +85,7 @@ def ask(q: Question):
     if not question:
         return {"error": "Empty question."}
 
-    if q.spoken:
+    if q.spoken and not q.followup:
         _speak_now(pick_generic())
 
     try:
@@ -150,9 +150,8 @@ def speak(s: Speech):
     t = re.sub(r"\s+", " ", t).strip()[:1200]
     if not t:
         return {"ok": False}
-    import time
-    _speaking["until"] = time.time() + max(3, len(t) / 14)
-    subprocess.Popen(["say", "-v", "Jamie (Premium)", "-r", "185", t])
+    _speaking["proc"] = subprocess.Popen(["say", "-v", "Jamie (Premium)", "-r", "185", t])
+    _speaking["kind"] = "answer"
     return {"ok": True}
 
 
@@ -161,7 +160,8 @@ def stop_all():
     """Stop speech, clear any pending wake, and silence the listener briefly."""
     import subprocess, time
     subprocess.run(["pkill", "-f", "^say "], check=False)
-    _speaking["until"] = 0.0
+    _speaking["proc"] = None
+    _speaking["kind"] = None
     _wake_flag["t"] = 0.0
     return {"ok": True}
 
@@ -171,11 +171,18 @@ def shush():
     """Stop whatever is being spoken."""
     import subprocess
     subprocess.run(["pkill", "-f", "^say "], check=False)
-    _speaking["until"] = 0.0
+    _speaking["proc"] = None
+    _speaking["kind"] = None
     return {"ok": True}
 
 
-_speaking = {"until": 0.0}
+_speaking = {"proc": None, "kind": None}
+
+
+def _is_speaking():
+    p = _speaking["proc"]
+    return p is not None and p.poll() is None
+
 
 _wake_flag = {"t": 0.0}
 
@@ -184,7 +191,7 @@ _wake_flag = {"t": 0.0}
 def wake():
     """Wake word heard. The UI polls /woke and starts recording."""
     import time
-    if time.time() < _speaking["until"]:
+    if _is_speaking():
         return {"ok": False, "reason": "speaking"}
     _wake_flag["t"] = time.time()
     return {"ok": True}
